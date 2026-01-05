@@ -1,0 +1,32 @@
+{
+  "tests": [
+    {
+      "name": "Login new user",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "phone": "+79001234567",
+        "name": "Тестовый пользователь"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "id": "number",
+        "phone": "string",
+        "name": "string",
+        "bonus_balance": "number"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get user info",
+      "method": "GET",
+      "path": "/?userId=1",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "id": "number",
+        "phone": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

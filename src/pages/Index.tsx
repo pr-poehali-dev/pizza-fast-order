@@ -4,8 +4,14 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import Icon from '@/components/ui/icon';
 import { Switch } from '@/components/ui/switch';
+import { useNavigate } from 'react-router-dom';
+import { authApi, ordersApi } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 interface Product {
   id: number;
@@ -50,10 +56,16 @@ const products: Product[] = [
 ];
 
 export default function Index() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isDark, setIsDark] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'pizza' | 'snack' | 'drink'>('all');
-  const [bonusBalance] = useState(250);
+  const [user, setUser] = useState<any>(null);
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (isDark) {
@@ -105,6 +117,60 @@ export default function Index() {
   const totalPrice = cart.reduce((sum, item) => sum + getItemPrice(item) * item.quantity, 0);
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  const handleLogin = async () => {
+    if (!phone) {
+      toast({ title: 'Ошибка', description: 'Введите номер телефона', variant: 'destructive' });
+      return;
+    }
+    try {
+      setLoading(true);
+      const userData = await authApi.login(phone, name || 'Гость');
+      setUser(userData);
+      localStorage.setItem('userId', userData.id);
+      setShowLoginDialog(false);
+      toast({ title: 'Успешно', description: userData.isNew ? `Добро пожаловать! Вам начислено ${userData.bonus_balance} бонусов` : 'Вход выполнен' });
+    } catch (error) {
+      toast({ title: 'Ошибка', description: 'Не удалось войти', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCheckout = async () => {
+    if (!user) {
+      setShowLoginDialog(true);
+      return;
+    }
+    try {
+      const orderData = {
+        userId: user.id,
+        items: cart.map(item => ({
+          id: item.id,
+          name: item.name,
+          selectedSize: item.selectedSize,
+          quantity: item.quantity,
+          price: getItemPrice(item)
+        })),
+        totalPrice,
+        bonusUsed: 0,
+        deliveryAddress: 'Адрес доставки',
+        phone: user.phone
+      };
+      await ordersApi.create(orderData);
+      setCart([]);
+      toast({ title: 'Заказ оформлен!', description: 'Ожидайте доставку в течение 30 минут' });
+    } catch (error) {
+      toast({ title: 'Ошибка', description: 'Не удалось оформить заказ', variant: 'destructive' });
+    }
+  };
+
+  useEffect(() => {
+    const userId = localStorage.getItem('userId');
+    if (userId) {
+      authApi.getUser(Number(userId)).then(setUser).catch(() => {});
+    }
+  }, []);
+
   const filteredProducts = selectedCategory === 'all' 
     ? products 
     : products.filter(p => p.category === selectedCategory);
@@ -121,6 +187,24 @@ export default function Index() {
           </div>
 
           <div className="flex items-center gap-4">
+            {user ? (
+              <>
+                <Button variant="ghost" onClick={() => navigate('/admin')} className="hidden md:flex">
+                  {user.is_admin && <Icon name="Shield" size={18} className="mr-2" />}
+                  {user.name}
+                </Button>
+                <Badge className="gradient-secondary-bg text-white border-0">
+                  <Icon name="Award" size={14} className="mr-1" />
+                  {user.bonus_balance} ₽
+                </Badge>
+              </>
+            ) : (
+              <Button variant="outline" onClick={() => setShowLoginDialog(true)}>
+                <Icon name="User" size={18} className="mr-2" />
+                Войти
+              </Button>
+            )}
+
             <div className="flex items-center gap-2">
               <Icon name="Sun" size={18} />
               <Switch checked={isDark} onCheckedChange={setIsDark} />
@@ -177,19 +261,21 @@ export default function Index() {
                         </Card>
                       ))}
 
-                      <Card className="p-4 gradient-secondary-bg text-white">
-                        <div className="flex items-center justify-between mb-2">
-                          <span>Бонусный баланс:</span>
-                          <span className="font-bold">{bonusBalance} ₽</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xl font-bold">
-                          <span>Итого:</span>
-                          <span>{totalPrice} ₽</span>
-                        </div>
-                      </Card>
+                      {user && (
+                        <Card className="p-4 gradient-secondary-bg text-white">
+                          <div className="flex items-center justify-between mb-2">
+                            <span>Бонусный баланс:</span>
+                            <span className="font-bold">{user.bonus_balance} ₽</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xl font-bold">
+                            <span>Итого:</span>
+                            <span>{totalPrice} ₽</span>
+                          </div>
+                        </Card>
+                      )}
 
-                      <Button className="w-full gradient-bg text-white text-lg py-6 hover:opacity-90">
-                        Оформить заказ
+                      <Button className="w-full gradient-bg text-white text-lg py-6 hover:opacity-90" onClick={handleCheckout} disabled={loading}>
+                        {loading ? 'Оформление...' : 'Оформить заказ'}
                       </Button>
                     </>
                   )}
@@ -214,11 +300,11 @@ export default function Index() {
             Доставка за 30 минут или пицца в подарок 🚀
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <Button size="lg" className="gradient-bg text-white hover:opacity-90">
+            <Button size="lg" className="gradient-bg text-white hover:opacity-90" onClick={() => window.scrollTo({ top: 600, behavior: 'smooth' })}>
               <Icon name="Pizza" size={20} className="mr-2" />
               Выбрать пиццу
             </Button>
-            <Button size="lg" variant="outline">
+            <Button size="lg" variant="outline" onClick={() => navigate('/constructor')}>
               <Icon name="Sparkles" size={20} className="mr-2" />
               Конструктор пиццы
             </Button>
@@ -305,6 +391,45 @@ export default function Index() {
           </div>
         </div>
       </footer>
+
+      <Dialog open={showLoginDialog} onOpenChange={setShowLoginDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Вход в личный кабинет</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone">Номер телефона</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+7 (999) 123-45-67"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="name">Имя (необязательно)</Label>
+              <Input
+                id="name"
+                placeholder="Ваше имя"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <Button
+              className="w-full gradient-bg text-white hover:opacity-90"
+              onClick={handleLogin}
+              disabled={loading}
+            >
+              {loading ? 'Вход...' : 'Войти'}
+            </Button>
+            <p className="text-sm text-muted-foreground text-center">
+              При первом входе вам будет начислено 250 бонусных рублей! 🎉
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

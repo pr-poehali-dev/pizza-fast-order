@@ -1,0 +1,39 @@
+{
+  "tests": [
+    {
+      "name": "Create order",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "userId": 1,
+        "items": [
+          {
+            "id": 1,
+            "name": "Маргарита",
+            "selectedSize": 25,
+            "quantity": 1,
+            "price": 450
+          }
+        ],
+        "totalPrice": 450,
+        "bonusUsed": 0,
+        "deliveryAddress": "ул. Тестовая, 1",
+        "phone": "+79001234567"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "id": "number",
+        "total_price": "number",
+        "status": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get all orders",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}
